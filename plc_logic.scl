@@ -1,0 +1,92 @@
+FUNCTION_BLOCK "FB_Defect_Shift_Register"
+{ S7_Optimized_Access := 'FALSE' }
+VERSION : 0.1
+VAR_INPUT 
+   i_Encoder_Value : DInt;   // HSC (High Speed Counter) ID1000 gibi fiziksel giriş adresine bağlanmalı
+   i_Vision_Trigger : Bool;  // Python'dan gelen DB biti (Örn: "DataBlock_1".Vision_Trigger)
+   i_Marking_Distance : DInt := 2000; // Kamera - Sprey arası mesafe (Pulse cinsinden, kalibre edilmeli)
+   i_Marking_Duration : Time := T#100ms; // Sprey valfinin açık kalma süresi
+   i_Reset : Bool; // Sistemi sıfırla (Bir butona bağlanabilir)
+END_VAR
+
+VAR_OUTPUT 
+   q_Spray_Valve : Bool; // Fiziki çıkışa bağlanmalı (Örn: Q0.0 -> Sprey Valfi)
+   q_Error_Count : Int;   // HMI veya SCADA için sayaç
+END_VAR
+
+VAR 
+   // FIFO Kuyruk Tanımları
+   Buffer : Array[0..19] of DInt; // Maksimum 20 hatayı hafızada tutabilir
+   Write_Ptr : Int := 0;
+   Read_Ptr : Int := 0;
+   Items_In_Buffer : Int := 0;
+   
+   // Yardımcı değişkenler
+   trig_Vision_R_Trig : Bool;
+   prev_Vision_Trigger : Bool;
+   
+   stat_Spray_Timer : TP;
+   stat_Timer_Active : Bool;
+END_VAR
+
+BEGIN
+	// 1. Reset İşlemi
+	IF #i_Reset THEN
+	    #Write_Ptr := 0;
+	    #Read_Ptr := 0;
+	    #Items_In_Buffer := 0;
+	    #q_Spray_Valve := FALSE;
+	    #q_Error_Count := 0;
+	    RETURN;
+	END_IF;
+	
+	// 2. Rising Edge Yakalama (Python'dan gelen sinyal için)
+	#trig_Vision_R_Trig := #i_Vision_Trigger AND NOT #prev_Vision_Trigger;
+	#prev_Vision_Trigger := #i_Vision_Trigger;
+	
+	// 3. Yazma Mantığı (Hata geldiğinde kuyruğa ekle)
+	IF #trig_Vision_R_Trig THEN
+	    // Eğer kuyruk dolu değilse ekle
+	    IF #Items_In_Buffer < 20 THEN
+	        #Buffer[#Write_Ptr] := #i_Encoder_Value; // O anki encoder değerini kaydet
+	        
+	        // Pointer yönetimi (Dairesel arttırım)
+	        #Write_Ptr := #Write_Ptr + 1;
+	        IF #Write_Ptr >= 20 THEN
+	            #Write_Ptr := 0;
+	        END_IF;
+	        
+	        #Items_In_Buffer := #Items_In_Buffer + 1;
+	    END_IF;
+	END_IF;
+	
+	// 4. Okuma ve Karşılaştırma Mantığı
+	// Eğer kuyrukta eleman varsa kontrol et
+	IF #Items_In_Buffer > 0 THEN
+	    // Hedeflenen pozisyon = Kaydedilen Pozisyon + Mesafe
+	    // Şu anki Encoder değeri bu hedefe ulaştı mı?
+	    
+	    IF #i_Encoder_Value >= (#Buffer[#Read_Ptr] + #i_Marking_Distance) THEN
+	        // HEDEF ULAŞILDI! SPREYİ TETİKLE.
+	        #stat_Timer_Active := TRUE;
+	        
+	        // Kuyruktan çıkar (Read Pointer ilerlet)
+	        #Read_Ptr := #Read_Ptr + 1;
+	        IF #Read_Ptr >= 20 THEN
+	            #Read_Ptr := 0;
+	        END_IF;
+	        
+	        #Items_In_Buffer := #Items_In_Buffer - 1;
+	        #q_Error_Count := #q_Error_Count + 1;
+	    END_IF;
+	END_IF;
+	
+	// 5. Çıkış Zamanlayıcısı (Sprey 100ms açık kalsın)
+	#stat_Spray_Timer(IN := #stat_Timer_Active,
+	                  PT := #i_Marking_Duration,
+	                  Q => #q_Spray_Valve);
+	                  
+	// Timer tetiklendiği cycle'dan sonra bayrağı indir
+	#stat_Timer_Active := FALSE;
+
+END_FUNCTION_BLOCK
