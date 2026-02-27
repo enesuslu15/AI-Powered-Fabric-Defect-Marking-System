@@ -1,6 +1,6 @@
 # 🤖 AI-Powered Fabric Defect Marking System — Project Report
 
-
+![Demo](AI-Powered-Fabric-Defect-Marking-System.png)
 
 ## 1. Project Summary
 
