@@ -36,6 +36,10 @@ def main():
 
     print("Sistem Başlatıldı. 'q' tuşuna basarak çıkabilirsiniz.")
 
+    # Debounce mekanizması için değişkenler
+    last_trigger_time = 0.0
+    COOLDOWN_SECONDS = 2.0  # Aynı hata için bekleme süresi
+
     try:
         while True:
             # Görüntü al ve analiz et
@@ -46,13 +50,17 @@ def main():
 
             # Eğer hata tespit edildiyse
             if defect_detected:
-                print(f"[{time.strftime('%H:%M:%S')}] HATA TESPİT EDİLDİ! PLC Tetikleniyor...")
                 # Ekrana görsel uyarı çiz
                 cv2.rectangle(frame, (0,0), (640, 50), (0,0,255), -1)
                 cv2.putText(frame, "!!! HATALI URUN !!!", (200, 35), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
                 
-                # PLC'ye sinyal gönder
-                plc.trigger_defect_signal(byte_index=DB_BYTE, bit_index=DB_BIT)
+                current_time = time.time()
+                # Cooldown süresi geçtiyse PLC'yi tetikle
+                if (current_time - last_trigger_time) > COOLDOWN_SECONDS:
+                    print(f"[{time.strftime('%H:%M:%S')}] HATA TESPİT EDİLDİ! PLC Tetikleniyor...")
+                    # PLC'ye sinyal gönder
+                    plc.trigger_defect_signal(byte_index=DB_BYTE, bit_index=DB_BIT)
+                    last_trigger_time = current_time
             
             if plc.connected:
                 status_text = "PLC: ONLINE"

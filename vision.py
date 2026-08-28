@@ -51,11 +51,12 @@ class DefectDetector:
         annotated_frame = results[0].plot()
         
         # Tespit edilen nesneleri kontrol et
-        # Eğer özel eğitilmiş modelse, conf (güvenilirlik) > 0.5 ise hata kabul et
+        # Sadece güven skoru (confidence) %50'den büyük olanları geçerli hata kabul et
         for r in results:
-            if len(r.boxes) > 0:
+            valid_boxes = [box for box in r.boxes if float(box.conf[0]) > 0.5]
+            if len(valid_boxes) > 0:
                 defect_detected = True
-                defect_info = f"Hata Sayısı: {len(r.boxes)}"
+                defect_info = f"Hata Sayısı: {len(valid_boxes)}"
         
         return annotated_frame, defect_detected, defect_info
 

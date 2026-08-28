@@ -1,6 +1,7 @@
 import snap7
 from snap7.util import set_bool, set_int, set_real
 import time
+import threading
 
 class PLCClient:
     def __init__(self, ip='192.168.0.1', rack=0, slot=1, db_number=1):
@@ -55,16 +56,19 @@ class PLCClient:
             self.client.db_write(self.db_number, byte_index, data)
             # print("PLC Sinyal Gönderildi: TRUE")
             
-            # Çok kısa bekle ve Resetle (PLC programında Rising Edge kullanıyorsak bu gerekli olmayabilir 
-            # ancak Python döngüsü yavaşsa PLC bunu sürekli 1 görebilir. 
-            # En temiz yöntem: Python 1 yazar, PLC işlemi yapınca 0'a çeker (Handshake).
-            # VEYA Python 1 saniyelik bir pulse üretir.)
-            
-            time.sleep(0.1) 
-            
-            set_bool(data, 0, bit_index, False)
-            self.client.db_write(self.db_number, byte_index, data)
-            # print("PLC Sinyal Sıfırlandı: FALSE")
+            # Gecikmeyi ve sıfırlamayı (pulse) ana döngüyü bloklamamak için arka planda yap
+            def reset_pulse():
+                try:
+                    time.sleep(0.1) 
+                    # Reset öncesi güncel datayı oku ve 0'a çek
+                    reset_data = self.client.db_read(self.db_number, byte_index, 1)
+                    set_bool(reset_data, 0, bit_index, False)
+                    self.client.db_write(self.db_number, byte_index, reset_data)
+                    # print("PLC Sinyal Sıfırlandı: FALSE")
+                except Exception as e:
+                    print(f"PLC Reset Hatası: {e}")
+                    
+            threading.Thread(target=reset_pulse, daemon=True).start()
 
         except Exception as e:
             print(f"PLC Yazma Hatası: {e}")

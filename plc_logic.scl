@@ -66,7 +66,7 @@ BEGIN
 	    // Hedeflenen pozisyon = Kaydedilen Pozisyon + Mesafe
 	    // Şu anki Encoder değeri bu hedefe ulaştı mı?
 	    
-	    IF #i_Encoder_Value >= (#Buffer[#Read_Ptr] + #i_Marking_Distance) THEN
+	    IF (#i_Encoder_Value - #Buffer[#Read_Ptr]) >= #i_Marking_Distance THEN
 	        // HEDEF ULAŞILDI! SPREYİ TETİKLE.
 	        #stat_Timer_Active := TRUE;
 	        
